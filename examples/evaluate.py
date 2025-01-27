@@ -24,6 +24,7 @@ from pii_leakage.ner.tagger_factory import TaggerFactory
 from pii_leakage.utils.output import print_dict_highlighted
 from pii_leakage.utils.set_ops import intersection
 
+import ipdb
 
 def parse_args():
     parser = transformers.HfArgumentParser((ModelArgs,
@@ -63,10 +64,12 @@ def evaluate(model_args: ModelArgs,
     baseline_args.model_ckpt = None
     baseline_lm: LanguageModel = ModelFactory.from_model_args(baseline_args, env_args=env_args).load(verbose=True)
 
+    # Load the dataset and extract real PII
     train_dataset = DatasetFactory.from_dataset_args(dataset_args=dataset_args.set_split('train'), ner_args=ner_args)
     real_pii: ListPII = train_dataset.load_pii().flatten(attack_args.pii_class)
     print(f"Sample 20 real PII out of {len(real_pii.unique().mentions())}: {real_pii.unique().mentions()[:20]}")
 
+    ipdb.set_trace()
     attack: PrivacyAttack = AttackFactory.from_attack_args(attack_args, ner_args=ner_args, env_args=env_args)
     if isinstance(attack, ExtractionAttack):
         # Compute Precision/Recall for the extraction attack.

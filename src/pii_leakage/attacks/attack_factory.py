@@ -9,7 +9,7 @@ from .inference.perpexity_inference import PerplexityInferenceAttack
 from .privacy_attack import PrivacyAttack
 from .reconstruction.perplexity_reconstruction import PerplexityReconstructionAttack
 
-
+ 
 class AttackFactory:
     @staticmethod
     def from_attack_args(attack_args: AttackArgs, ner_args: NERArgs = None, env_args: EnvArgs = None) -> PrivacyAttack:

@@ -9,6 +9,8 @@ from ...ner.tagger import Tagger
 from ...ner.tagger_factory import TaggerFactory
 from ...utils.output import print_highlighted
 
+# Try to understand NaiveExtractionAttack class and its attack method
+import ipdb
 
 class NaiveExtractionAttack(ExtractionAttack):
 
@@ -37,6 +39,7 @@ class NaiveExtractionAttack(ExtractionAttack):
         tagger: Tagger = self._get_tagger()
         entities = tagger.analyze([str(x) for x in generated_text])
 
+        ipdb.set_trace()
         # Filter out the entities that are classified as the target entity class.
         pii = entities.get_by_entity_class(self.attack_args.pii_class)
 
