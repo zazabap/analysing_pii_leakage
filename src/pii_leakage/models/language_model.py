@@ -12,6 +12,15 @@ from tqdm import tqdm
 from transformers import DataCollatorForLanguageModeling, Trainer, AutoTokenizer, AutoModelForCausalLM, \
     TrainerCallback
 
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    GPT2LMHeadModel,
+    GPTJForCausalLM,
+    GPTNeoXForCausalLM,
+    LlamaForCausalLM,
+)
+
 from ..arguments.env_args import EnvArgs
 from ..arguments.model_args import ModelArgs
 from ..arguments.privacy_args import PrivacyArgs
@@ -55,6 +64,25 @@ class LanguageModel:
         self._tokenizer = None  # the tokenizer in huggingface
         self._data = {}  # additional data to be saved for the model
 
+    def get_embedding_matrix(self):
+        """
+        Get the embedding matrix of the model.
+
+        Returns:
+            torch.Tensor: The embedding matrix.
+        """
+        if isinstance(self._lm, GPT2LMHeadModel):
+            print("GPT2LMHeadModel")
+            return self._lm.transformer.wte.weight
+        elif isinstance(self._lm, GPTJForCausalLM):
+            return self._lm.transformer.wte.weight
+        elif isinstance(self._lm, LlamaForCausalLM):
+            return self._lm.model.embed_tokens.weight
+        elif isinstance(self._lm, GPTNeoXForCausalLM):
+            return self._lm.base_model.embed_in.weight
+        else:
+            raise ValueError(f"Unknown model type: {type(self._lm)}")
+
     @property
     def ckpt(self):
         return self.model_args.model_ckpt
@@ -64,10 +92,16 @@ class LanguageModel:
         """ Gets the maximum size of the context """
         return self._lm.config.n_positions
 
-    @abstractmethod
     def tokenizer(self):
-        """ Returns this model's tokenizer. """
-        raise NotImplementedError
+        """
+        Returns this model's tokenizer.
+
+        Returns:
+            AutoTokenizer: The tokenizer associated with the model.
+        """
+        if self._tokenizer is None:
+            raise ValueError("Tokenizer has not been loaded. Call `load` method first.")
+        return self._tokenizer
 
     @abstractmethod
     def get_config(self):
@@ -180,6 +214,32 @@ class LanguageModel:
         inputs = self._tokenizer(prompts, return_tensors="pt", padding=True, truncation=True)
         input_ids = inputs['input_ids']
         attention_mask = inputs['attention_mask']
+
+        generated_data: List[GeneratedText] = []
+        num_batches = int(np.ceil(sampling_args.N / self.env_args.eval_batch_size))
+        for _ in tqdm(
+                range(num_batches),
+                disable=not sampling_args.generate_verbose,
+                desc="Generating with LM"
+        ):
+            generated_data.extend(self.generate_batch(input_ids, attention_mask, sampling_args))
+
+        return GeneratedTextList(data=generated_data)
+
+    @torch.no_grad()
+    def generate_adv(self, sampling_args: SamplingArgs) -> GeneratedTextList:
+        """ Generates text using the sampling args.
+        """
+        r = min(self.env_args.eval_batch_size, sampling_args.N)
+
+        # Encode the input prompt
+        prompts: List[str] =  sampling_args.prompt
+
+        inputs = self._tokenizer(prompts, return_tensors="pt", padding=True, truncation=True)
+        input_ids = inputs['input_ids']
+        attention_mask = inputs['attention_mask']
+        
+        print(torch.cuda.memory_summary())
 
         generated_data: List[GeneratedText] = []
         num_batches = int(np.ceil(sampling_args.N / self.env_args.eval_batch_size))

@@ -41,7 +41,9 @@ def extract_pii(model_args: ModelArgs,
     lm: LanguageModel = ModelFactory.from_model_args(model_args, env_args=env_args).load(verbose=True)
 
     attack: NaiveExtractionAttack = AttackFactory.from_attack_args(attack_args, ner_args=ner_args, env_args=env_args)
-    results: dict = attack.attack(lm, verbose=True)
+    # results: dict = attack.attack(lm, verbose=True)
+
+    results: dict = attack.attack_test(lm, verbose=True)
 
     print_separator()
     print(f"{bcolors.OKBLUE}Best Guess:{bcolors.ENDC} {results}")
