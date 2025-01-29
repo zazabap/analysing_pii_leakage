@@ -10,19 +10,12 @@ from ...ner.tagger_factory import TaggerFactory
 from ...utils.output import print_highlighted
 import random
 
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    GPT2LMHeadModel,
-    GPTJForCausalLM,
-    GPTNeoXForCausalLM,
-    LlamaForCausalLM,
-)
+
 # Try to understand NaiveExtractionAttack class and its attack method
-import ipdb
 import torch
 import csv
 import pandas as pd
+import gc
 
 class NaiveExtractionAttack(ExtractionAttack):
 
@@ -137,20 +130,20 @@ class NaiveExtractionAttack(ExtractionAttack):
 
         df_prompt_list = pd.read_csv("prompt_list.csv")
         prompt_list = df_prompt_list['output'].tolist()
+        del df_prompt_list
+        gc.collect() # Garbage collection call to free up memory
 
-        # print(f"Prompt list: {prompt_list}")
-        print(len(prompt_list))
         # Setting up sampling arguments for the language model generation.
         sampling_args = SamplingArgs(N=self.attack_args.sampling_rate,
                                      seq_len=self.attack_args.seq_len,
                                      generate_verbose=True)
 
         sampling_args.prompt = prompt_list
+        torch.cuda.empty_cache()
+        
         # Generating text using the language model.
         generated_text: GeneratedTextList = lm.generate_adv(sampling_args)
 
-        print(torch.cuda.memory_summary())
-        
         # Analyzing the generated text with the tagger to extract entities.
         tagger: Tagger = self._get_tagger()
         entities = tagger.analyze([str(x) for x in generated_text])
