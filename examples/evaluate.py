@@ -8,6 +8,10 @@ import transformers
 from tqdm import tqdm
 import pandas as pd
 
+import matplotlib.pyplot as plt
+from sklearn.manifold import TSNE
+import torch
+
 from pii_leakage.arguments.attack_args import AttackArgs
 from pii_leakage.arguments.config_args import ConfigArgs
 from pii_leakage.arguments.dataset_args import DatasetArgs
@@ -25,7 +29,6 @@ from pii_leakage.ner.tagger_factory import TaggerFactory
 from pii_leakage.utils.output import print_dict_highlighted
 from pii_leakage.utils.set_ops import intersection
 
-import ipdb
 
 def parse_args():
     parser = transformers.HfArgumentParser((ModelArgs,
@@ -178,7 +181,45 @@ def evaluate(model_args: ModelArgs,
         raise ValueError(f"Unknown attack type: {type(attack)}")
 
 
-def evaluate_embeddings(model_args: ModelArgs,
+def plot_embeddings(set_A, set_B, embedding_matrix, hf_tokenizer, device, filename="embeddings_plot.png"):
+    """
+    Plot the embeddings of two sets using t-SNE for dimensionality reduction and save the figure.
+
+    Args:
+        set_A (set): The first set of PII.
+        set_B (set): The second set of PII.
+        embedding_matrix (torch.Tensor): The embedding matrix of the model.
+        hf_tokenizer: The Hugging Face tokenizer to convert PII to input IDs.
+        device: The device to move the tensors to.
+        filename (str): The filename to save the plot.
+    """
+    def get_embedding(pii):
+        input_ids = torch.tensor(hf_tokenizer.encode(pii, truncation=True)).unsqueeze(0).to(device)
+        return embedding_matrix[input_ids].mean(dim=1).squeeze().detach().cpu().numpy()
+
+    # Extract embeddings for set_A and set_B
+    embeddings_A = np.array([get_embedding(pii) for pii in set_A])
+    embeddings_B = np.array([get_embedding(pii) for pii in set_B])
+
+    # Combine embeddings and create labels
+    embeddings = np.vstack((embeddings_A, embeddings_B))
+    labels = np.array([0] * len(embeddings_A) + [1] * len(embeddings_B))
+
+    # Reduce dimensionality using t-SNE
+    tsne = TSNE(n_components=2, random_state=42)
+    embeddings_2d = tsne.fit_transform(embeddings)
+
+    # Plot the embeddings
+    plt.figure(figsize=(10, 8))
+    plt.scatter(embeddings_2d[labels == 0, 0], embeddings_2d[labels == 0, 1], label='Set A', alpha=0.6)
+    plt.scatter(embeddings_2d[labels == 1, 0], embeddings_2d[labels == 1, 1], label='Set B', alpha=0.6)
+    plt.legend()
+    plt.title('t-SNE plot of embeddings')
+    plt.xlabel('Dimension 1')
+    plt.ylabel('Dimension 2')
+    plt.savefig(filename)
+
+def evaluate_gen(model_args: ModelArgs,
              ner_args: NERArgs,
              dataset_args: DatasetArgs,
              attack_args: AttackArgs,
@@ -228,7 +269,8 @@ def evaluate_embeddings(model_args: ModelArgs,
         # Compute Precision/Recall for the extraction attack.
         generated_pii = set(attack.attack(lm).keys())
         # ipdb.set_trace()
-        baseline_pii = set(attack.attack(baseline_lm).keys())
+        baseline_pii = set()
+        # set(attack.attack(baseline_lm).keys())
         real_pii_set = set(real_pii.unique().mentions())
 
         # Remove baseline leakage
@@ -238,6 +280,11 @@ def evaluate_embeddings(model_args: ModelArgs,
         baseline_count = len(baseline_pii)
         leaked_count = len(leaked_pii)
         intersection_count = len(real_pii_set.intersection(leaked_pii))
+
+        # Plot the embeddings of the leaked PII
+        set_A = real_pii_set.intersection(leaked_pii)
+        set_B = leaked_pii.difference(set_A)
+        plot_embeddings(set_A, set_B, lm.get_embedding_matrix(), lm._tokenizer, "cuda" ,filename="embeddings_plot.png")
 
         precision = 100 * intersection_count / len(leaked_pii) if len(leaked_pii) > 0 else 0
         recall = 100 * intersection_count / len(real_pii) if len(real_pii) > 0 else 0
@@ -353,5 +400,6 @@ def evaluate_test(model_args: ModelArgs,
 # ----------------------------------------------------------------------------
 if __name__ == "__main__":
     # evaluate(*parse_args())
-    evaluate_test(*parse_args())
+    # evaluate_test(*parse_args())
+    evaluate_gen(*parse_args())
 # ----------------------------------------------------------------------------

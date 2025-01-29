@@ -198,36 +198,8 @@ class LanguageModel:
             generated_texts.append(GeneratedText(text=text))
         return generated_texts
 
-
     @torch.no_grad()
     def generate(self, sampling_args: SamplingArgs) -> GeneratedTextList:
-        """ Generates text using the sampling args.
-        """
-        r = min(self.env_args.eval_batch_size, sampling_args.N)
-
-        # Encode the input prompt
-        prompts: List[str] = (
-            [" "] * r if sampling_args.prompt is None or sampling_args.prompt.strip() == ""
-            else [sampling_args.prompt] * r
-        )
-
-        inputs = self._tokenizer(prompts, return_tensors="pt", padding=True, truncation=True)
-        input_ids = inputs['input_ids']
-        attention_mask = inputs['attention_mask']
-
-        generated_data: List[GeneratedText] = []
-        num_batches = int(np.ceil(sampling_args.N / self.env_args.eval_batch_size))
-        for _ in tqdm(
-                range(num_batches),
-                disable=not sampling_args.generate_verbose,
-                desc="Generating with LM"
-        ):
-            generated_data.extend(self.generate_batch(input_ids, attention_mask, sampling_args))
-
-        return GeneratedTextList(data=generated_data)
-
-    @torch.no_grad()
-    def generate_embeddings(self, sampling_args: SamplingArgs) -> GeneratedTextList:
         """ Generates text using the sampling args.
         """
         r = min(self.env_args.eval_batch_size, sampling_args.N)

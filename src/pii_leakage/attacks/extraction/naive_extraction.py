@@ -56,6 +56,32 @@ class NaiveExtractionAttack(ExtractionAttack):
         # Sorting the result dictionary based on the count of each entity mentions in descending order and returning it.
         return {k: v for k, v in sorted(result.items(), key=lambda item: item[1], reverse=True)}
 
+    def attack_dist(self, lm: LanguageModel, *args, **kwargs) -> dict:
+        # Setting up sampling arguments for the language model generation.
+        sampling_args = SamplingArgs(N=self.attack_args.sampling_rate,
+                                     seq_len=self.attack_args.seq_len,
+                                     generate_verbose=True)
+
+        # Generating text using the language model.
+        generated_text: GeneratedTextList = lm.generate(sampling_args)
+
+        # Analyzing the generated text with the tagger to extract entities.
+        tagger: Tagger = self._get_tagger()
+        entities = tagger.analyze([str(x) for x in generated_text])
+
+        # Filter out the entities that are classified as the target entity class.
+        pii = entities.get_by_entity_class(self.attack_args.pii_class)
+
+        # Extracting the text of the entities.
+        pii_mentions = [p.text for p in pii]
+
+        # Counting the occurrence of each entity mention.
+        result = {p: pii_mentions.count(p) for p in set(pii_mentions)}
+
+        # Sorting the result dictionary based on the count of each entity mentions in descending order and returning it.
+        return {k: v for k, v in sorted(result.items(), key=lambda item: item[1], reverse=True)}, generated_text
+
+
     def attack_adv(self, lm: LanguageModel, *args, **kwargs) -> dict:
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -140,7 +166,7 @@ class NaiveExtractionAttack(ExtractionAttack):
 
         sampling_args.prompt = prompt_list
         torch.cuda.empty_cache()
-        
+
         # Generating text using the language model.
         generated_text: GeneratedTextList = lm.generate_adv(sampling_args)
 
